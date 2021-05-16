@@ -1,0 +1,11 @@
+# This file may be used to create an environment using:
+numpy
+pandas
+scipy
+cvxpy
+matplotlib
+cvxpylayers
+torch
+sklearn
+# New
+pypower
