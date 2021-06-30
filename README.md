@@ -4,7 +4,7 @@ This is the official repository that implements the following paper:
 
 ...
 
-[[slides]](docs/slides.pdf)[[paper]](https://dl.acm.org/doi/10.1145/3408308.3427980)[[video]](https://www.youtube.com/watch?v=rH64WyPHCVE) 
+[[slides]](docs/slides.pdf)[[paper]](https://dl.acm.org/doi/10.1145/3447555.3464874)[[video]](https://www.youtube.com/watch?v=rH64WyPHCVE) 
 
 # Overview
 
@@ -14,7 +14,7 @@ This is the official repository that implements the following paper:
 ### Clone repository
 ```
 git clone https://github.com/INFERLab/PROF.git
-cd COHORT
+cd PROF
 ```
 
 ### Set up the environment 
@@ -54,8 +54,8 @@ Feel free to send any questions/feedback to: [Bingqing Chen](mailto:bingqinc@and
 
 ### Citation
 
-If you use COHORT, please cite us as follows:
+If you use PROF, please cite us as follows:
 
 ```
-
+Bingqing Chen, Priya L. Donti, Kyri Baker, J. Zico Kolter, and Mario Bergés. 2021. Enforcing Policy Feasibility Constraints through Differentiable Projection for Energy Optimization. In Proceedings of the Twelfth ACM International Conference on Future Energy Systems (e-Energy '21). Association for Computing Machinery, New York, NY, USA, 199–210. DOI:https://doi.org/10.1145/3447555.3464874
 ```
