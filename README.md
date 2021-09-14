@@ -4,8 +4,8 @@ This is the official repository that implements the following paper:
 
 > *Chen, Bingqing, Priya Donti, Kyri Baker, J. Zico Kolter, and Mario Berges. "Enforcing Policy Feasibility Constraints through Differentiable Projection for Energy Optimization." In Proceedings of the Twelfth ACM International Conference on Future Energy Systems (e-energy '21). pp. 199–210. 2021.*
 
-[[slides]](docs/slides.pdf)[[paper]](https://dl.acm.org/doi/10.1145/3447555.3464874)<[[video]](https://www.youtube.com/watch?v=rH64WyPHCVE)> 
-
+[[slides]](docs/slides.pdf)[[paper]](https://dl.acm.org/doi/10.1145/3447555.3464874) 
+<!--- [[video]](https://www.youtube.com/watch?v=rH64WyPHCVE) ---> 
 # Overview
 
 PROjected Feasibility (PROF) is a method to enforce convex operational constraints within neural policies, by incorporating a differentiable projection layer within a neural network-based policy to enforce that all learned actions are feasible. We then update the policy end-to-end by propagating gradients through this differentiable projection layer, making the policy cognizant of the operational constraints. The result is a powerful neural policy that can flexibly optimize performance on the true underlying dynamics, while still satisfying the specified constraints.
@@ -16,6 +16,7 @@ We demonstrate our method on two applications: energy-efficient building operati
 
 **Framework.** 
 <img src="docs/figs/framework.pdf" data-canonical-src="docs/figs/framework.pdf" width="600" />
+
 
 
 # Code Usage
