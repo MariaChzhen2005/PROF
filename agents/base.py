@@ -195,33 +195,3 @@ class ControllerGroup():
             controller.u_diff.value = u_list[idx] - u_bar
         return u_bar, np.array(u_list)
         
-class Aggregator():
-    def __init__(self, T, g_func, param_shapes, n_agent, rho):
-        self.N = n_agent
-        self.rho = rho
-        self.v_bar = cp.Variable(T)
-        
-        self.u_bar = cp.Parameter(T)
-        self.w_bar = cp.Parameter(T)
-        
-        self.param_list = []
-        for item in param_shapes:
-            self.param_list.append(cp.Parameter(item))
-        #print(self.param_list)
-        
-        # Objective:
-        cost = g_func(self.N*self.v_bar, self.param_list)#
-        
-        cost += self.N*self.rho/2*cp.sum_squares(self.u_bar-self.v_bar+self.w_bar)
-        self.Problem = cp.Problem(cp.Minimize(cost))
-
-    def setValues(self, value_list):
-        assert len(value_list) == len(self.param_list)
-        for idx, item in enumerate(self.param_list):
-            item.value = value_list[idx]
-
-    def v_update(self, u_bar, w_bar):
-        self.u_bar.value = u_bar
-        self.w_bar.value = w_bar
-        self.Problem.solve()
-        return self.v_bar.value
