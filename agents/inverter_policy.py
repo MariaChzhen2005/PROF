@@ -18,17 +18,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 class Net(nn.Module):
     def __init__(self, n_bus, n_inverters, shared_hidden_layer_sizes, indiv_hidden_layer_sizes, n_input = 3):
         super(Net, self).__init__()
-
-        '''
-            TODO: If want to support batch size = 1, need to take out batch norm
-        '''
-        
         #### Multi-headed architecture
         # "Shared" model
-        # Set up non-linear network of Linear -> BatchNorm -> ReLU
+        # Set up non-linear network of Linear  -> ReLU
         layer_sizes = [n_input * n_bus] + shared_hidden_layer_sizes[:-1]
         layers = reduce(operator.add, 
-            [[nn.Linear(a,b), nn.ReLU(), ] # nn.BatchNorm1d(b), nn.Dropout(p=0.2)]
+            [[nn.Linear(a,b), nn.ReLU(), ] 
                 for a,b in zip(layer_sizes[0:-1], layer_sizes[1:])])
         layers += [nn.Linear(layer_sizes[-1], shared_hidden_layer_sizes[-1])]
         self.base_net = nn.Sequential(*layers)
@@ -36,7 +31,7 @@ class Net(nn.Module):
         # Individual inverter model
         layer_sizes = [shared_hidden_layer_sizes[-1]] + indiv_hidden_layer_sizes
         layers = reduce(operator.add, 
-            [[nn.Linear(a,b),  nn.ReLU(), ] # nn.BatchNorm1d(b), nn.Dropout(p=0.2)]
+            [[nn.Linear(a,b),  nn.ReLU(), ] 
                 for a,b in zip(layer_sizes[0:-1], layer_sizes[1:])])
         layers += [nn.Linear(layer_sizes[-1], 2)]  # output p and q
         indiv_model = nn.Sequential(*layers)
