@@ -16,7 +16,7 @@ We demonstrate our method on two applications: energy-efficient building operati
 
 **Framework.** 
 
-<img src="docs/figs/framework.png" data-canonical-src="docs/figs/framework.png" width="700" />
+<img src="docs/figs/framework.pdf" data-canonical-src="docs/figs/framework.pdf" width="700" />
 
 
 
