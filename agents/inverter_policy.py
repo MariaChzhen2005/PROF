@@ -15,7 +15,6 @@ import pdb
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-### Can move to utils.network if appropriate
 class Net(nn.Module):
     def __init__(self, n_bus, n_inverters, shared_hidden_layer_sizes, indiv_hidden_layer_sizes, n_input = 3):
         super(Net, self).__init__()
@@ -239,15 +238,3 @@ class NeuralController(nn.Module):
         else:
             return True
 
-   
-    
-
-
-# if __name__ == "__main__":
-#     # Toy test code
-#     n = 3
-#     nbatch = 2
-#     model = Net(n, [200,200,40], [30,5])
-#     controller = NeuralController(n, model, np.random.randn(n, 2*n), 0.95, 1.05)
-#     action = controller(torch.randn(nbatch, 4*n), torch.randn(nbatch, n), torch.randn(nbatch, n))
-        

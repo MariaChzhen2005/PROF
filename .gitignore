@@ -1,3 +1,6 @@
+data/Irradiance_1sec_Anatolia_24.mat
+data/Loads_1sec_anatolia.mat
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
