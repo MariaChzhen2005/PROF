@@ -1,5 +1,6 @@
-data/Irradiance_1sec_Anatolia_24.mat
-data/Loads_1sec_anatolia.mat
+data/Irradiance_1sec.mat
+data/Loads_1sec.mat
+runs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

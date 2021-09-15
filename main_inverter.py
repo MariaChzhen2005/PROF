@@ -92,7 +92,9 @@ def main():
             state = torch.tensor(state).float().unsqueeze(0)
             
             P, Q = mbp_policy(state, Sbus, P_av = P_av)
-            V, success = env.step(P.detach().cpu().numpy() + 1j*Q.detach().cpu().numpy())
+            #pdb.set_trace()
+            
+            V, success = env.step(P + 1j*Q)
             V_prev = V[1:]
             
             if np.any(V>env.v_upper) | np.any(V<env.v_lower):
@@ -100,12 +102,12 @@ def main():
             writer.add_scalar("V/max", max(V[1:]), t)
             writer.add_scalar("V/min", min(V[1:]), t)
             
-            cost = torch.clamp(torch.tensor(P_av).float() - P[mbp_policy.gen_idx].cpu(), min =0)
+            cost = np.clip(P_av - P[mbp_policy.gen_idx], 0, None)
             loss += cost
             
             V_record.append(V[1:])
-            P_record.append(P.detach().cpu().numpy())
-            Q_record.append(Q.detach().cpu().numpy())
+            P_record.append(P)
+            Q_record.append(Q)
             
             if (k % 900 == 0) & (t>0):
                 mbp_policy.update()
