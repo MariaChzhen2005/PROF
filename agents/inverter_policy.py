@@ -84,8 +84,8 @@ class NeuralController(nn.Module):
         self.other_idx = [i for i in range(self.n_bus) if i not in self.gen_idx]
         
         H = env_params['H']
-        R = H[:, :n_bus]
-        B = H[:, n_bus:]
+        R = H[:, :self.n_bus]
+        B = H[:, self.n_bus:]
         R_new = np.vstack([np.hstack([R[self.gen_idx][:, self.gen_idx],
                                       R[self.gen_idx][:, self.other_idx]]),
                             np.hstack([R[self.other_idx][:, self.gen_idx],
