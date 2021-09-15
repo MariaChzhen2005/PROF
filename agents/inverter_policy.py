@@ -78,7 +78,7 @@ class NeuralController(nn.Module):
         self.mse = nn.MSELoss()
         self.ReLU = nn.ReLU()
         
-        n_bus = env_params['n_bus']
+        sellf.n_bus = env_params['n_bus']
         self.gen_idx = env_params['gen_idx']
         self.other_idx = [i for i in range(self.n_bus) if i not in self.gen_idx]
         
