@@ -3,6 +3,7 @@ import sys
 
 import gym
 import eplus_env
+from eplus_adapter import EplusEnvAdapter
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -59,10 +60,18 @@ def main():
     writer = SummaryWriter(comment = args.exp_name)
     
     # Create Simulation Environment
-    env = gym.make('Eplus-IW-test-v0')
+    # env = gym.make('Eplus-demo-v1')
+    base_env = gym.make('Eplus-demo-v1')
+    env = EplusEnvAdapter(base_env)
+    env.start_year = 2017
+    env.start_mon  = 1
+    env.start_day  = 1
+
+    # env = gym.make('Eplus-IW-test-v0')
     
     # Specify variable names for control problem
-    obs_name = ["Outdoor Temp.", "Outdoor RH", "Wind Speed", "Wind Direction", "Diff. Solar Rad.", "Direct Solar Rad.", "HW Enable OA Setpoint", "IW Average PPD", "HW Supply Setpoint", "Indoor Air Temp.", "Indoor Temp. Setpoint", "Occupancy Flag", "Heating Demand"]
+    obs_name = ["Outdoor Temp.", "Outdoor RH", "Wind Speed", "Wind Direction", "Diff. Solar Rad.", "Direct Solar Rad.", "HW Enable OA Setpoint",
+                "IW Average PPD", "HW Supply Setpoint", "Indoor Air Temp.", "Indoor Temp. Setpoint", "Occupancy Flag", "Heating Demand"]
     state_name = ["Indoor Air Temp."]
     dist_name = ["Outdoor Temp.", "Outdoor RH", "Wind Speed", "Wind Direction", "Diff. Solar Rad.", "Direct Solar Rad.", "Occupancy Flag"]
     ctrl_name = ["HW Enable OA Setpoint", "HW Supply Setpoint"]
@@ -140,8 +149,18 @@ def main():
             state = np.array([obs_dict[name] for name in state_name])
             state = (state-state_min)/(state_max-state_min)
             
+            # x_upper = obs_2017['x_upper'][cur_time : cur_time + pd.Timedelta(seconds = (T-1) * step)].values
+            # x_lower = obs_2017['x_lower'][cur_time : cur_time + pd.Timedelta(seconds = (T-1) * step)].values
             x_upper = obs_2017['x_upper'][cur_time : cur_time + pd.Timedelta(seconds = (T-1) * step)].values
             x_lower = obs_2017['x_lower'][cur_time : cur_time + pd.Timedelta(seconds = (T-1) * step)].values
+
+            # Add this check to prevent dimension mismatch
+            if len(x_lower) < T:
+                print(f"Warning: Planning horizon exceeds available data ({len(x_lower)} < {T})")
+                # Pad with the last available value
+                pad_length = T - len(x_lower)
+                x_lower = np.pad(x_lower, (0, pad_length), 'edge')
+                x_upper = np.pad(x_upper, (0, pad_length), 'edge')
             ## Margin
             #x_lower+=0.025
             #x_upper-=0.025
@@ -168,7 +187,7 @@ def main():
             
             ## Myopic Limit: A hack to make sure the projected actions do not result in tiny violations
             margin = 0.1/(state_max-state_min)
-            u_limits = np.array([x_lower[0]+margin.item(), x_upper[0]-margin.item()]) - model_dict['a'] * state.item() -  model_dict['bd'].dot(dt[0, :-1].numpy())
+            u_limits = np.array([x_lower[0]+margin.item(), x_upper[0]-margin.item()]) -model_dict['a'] * state.item() -  model_dict['bd'].dot(dt[0, :-1].numpy())
             u_limits /= model_dict['bu']
             u_limits = np.clip(u_limits, 0, 1)
             #pdb.set_trace()
@@ -187,10 +206,11 @@ def main():
                 SWT = 20
             action4env = (HWOEN, SWT)
             
-            # Before step
-            print(f'{cur_time}: IAT={obs_dict["Indoor Air Temp."]}, Occupied={obs_dict["Occupancy Flag"]}, Control={SWT}')
+            # Before stepprint(f'{cur_time}: IAT={obs_dict["Indoor Air Temp."]}, Occupied={obs_dict["Occupancy Flag"]}, Control={SWT}')
             for _ in range(3):
-                timeStep, obs, isTerminal = env.step(action4env)
+                obs, reward, isTerminal, info = env.step(action4env)
+                timeStep = info.get("timeStep", 0)  # Extract timeStep from info
+
 
             obs_dict = make_dict(obs_name, obs)
             reward = R_func(obs_dict, SWT-20, eta)

@@ -60,6 +60,7 @@ class NeuralController(Controller):
         '''
         T, n_batch, n_dist = disturbance.shape
         mus, sigma_sqs = self.nn(state, disturbance)# T x n x n_action
+        print("T, n_batch, n_dist", T, n_batch, n_dist)
                         
         actions = []
         #TODO: Implement multi-threading
@@ -77,20 +78,50 @@ class NeuralController(Controller):
                 x_upper = x_uppers[i]
             
             # The last value is setpoint; Do not use for projection
-            dt = disturbance[:, i, :-1] # T x n_dist
-            x0 = state[i]
+            dt = disturbance[:, i, :-1] # T x n_dist-1
+            x0 = torch.tensor(self.x0.value).float()  # Now uses the stored clipped x0
             mu = mu.squeeze(1) # T x 1 ->T
             
             try:
+                # Print constraint dimensions for debugging
+                print(f"Constraint check - dt shape: {dt.shape}, x0 shape: {x0.shape}")
+                print(f"u bounds: [{torch.tensor(self.u_lower.value).min()}, {torch.tensor(self.u_upper.value).max()}]")
+                
+                # Test feasibility with CVXPY directly (outside of layer)
+                test_u = cp.Variable(self.T)
+                test_problem = cp.Problem(
+                    cp.Minimize(cp.sum_squares(test_u)),
+                    self.constraints
+                )
+                feasibility_result = test_problem.solve(solver=cp.SCS, verbose=True)
+                print(f"Feasibility test result: {test_problem.status}")
+                
+                # Now proceed with the differentiable layer
                 u_pred = self.proj_layer(x0, dt,
-                   mu, torch.zeros_like(mu), torch.zeros_like(mu),
-                   x_upper, x_lower,
-                   torch.tensor(self.u_upper.value).float(),
-                   torch.tensor(self.u_lower.value).float())
+                        mu, torch.zeros_like(mu), torch.zeros_like(mu),
+                        x_upper, x_lower,
+                        torch.tensor(self.u_upper.value).float(),
+                        torch.tensor(self.u_lower.value).float(),
+                        solver_args={
+                                "max_iters": 50000,
+                                "eps": 1e-6,
+                                "scale": 10.0,  # Add scaling to improve conditioning
+                                "normalize": True  # Enable normalization
+                            })
+                print(f"Original action (from NN): {mu}")
+                print(f"Projected action: {u_pred[0]}")
+                print(f"Projection difference: {torch.norm(mu - u_pred[0]).item()}")
                 actions.append(u_pred[0])
-            except:
+                
+            except Exception as e:
+                print(f"Projection failed with error: {str(e)}")
+                # Print constraint values for debugging
+                print(f"x0: {x0}")
+                print(f"x_lower min/max: {x_lower.min()}/{x_lower.max()}")
+                print(f"x_upper min/max: {x_upper.min()}/{x_upper.max()}")
                 ## The feasible set is empty; Use some heuristics
                 sp = torch.mean((x_lower+x_upper)/2)
+                print(f"Projection failed. Heuristic used. Total fails: {self.err_count}")
                 if x0.item() < sp:
                     actions.append(torch.ones_like(mu))
                 else:
