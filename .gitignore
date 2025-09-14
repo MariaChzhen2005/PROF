@@ -2,6 +2,13 @@ data/Irradiance_1sec.mat
 data/Loads_1sec.mat
 runs/
 
+# Large model and data files
+*.pt
+*.npy
+*.npz
+*.pkl
+results/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

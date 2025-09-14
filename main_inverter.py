@@ -1,10 +1,12 @@
-import os, sys, argparse
+import os, sys, argparse, pickle
+import time
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from env.inverter import IEEE37
 
@@ -17,7 +19,6 @@ import pdb
 
 import torch
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DEVICE
 
 parser = argparse.ArgumentParser(description='GnuRL Demo: Online Learning')
 parser.add_argument('--gamma', type=float, default=0.98, metavar='G',
@@ -38,9 +39,49 @@ parser.add_argument('--network_name', type=str, default='ieee37',
 args = parser.parse_args()
 
 
+class StatsLogger:
+    def __init__(self, exp_name):
+        self.exp_name = exp_name
+        self.stats = {'V_max': [], 'V_min': [], 'Loss': [], 'violations': [], 'episodes': [], 'timesteps': [], 'proj_count': [], 'inference_times': []}
+    def add_scalar(self, name, value, step):
+        if name.startswith('V/'):
+            metric = name.replace('V/', 'V_')
+            self.stats[metric].append(value)
+            self.stats['timesteps'].append(step)
+        elif name in ['Loss', 'violations', 'proj_count']:
+            self.stats[name].append(value)
+            self.stats['episodes'].append(step)
+        elif name == 'inference_time':
+            self.stats['inference_times'].append(value)
+    def save(self):
+        os.makedirs("results", exist_ok=True)
+        with open(f"results/stats_{self.exp_name}.pkl", 'wb') as f:
+            pickle.dump(self.stats, f)
+        np.savez(f"results/stats_{self.exp_name}.npz", **self.stats)
+        with open(f"results/stats_{self.exp_name}.txt", 'w') as f:
+            f.write(f"Training Statistics for {self.exp_name}\n")
+            f.write("=" * 50 + "\n\n")
+            if self.stats['Loss']:
+                for i, (ep, loss, viol, proj) in enumerate(zip(self.stats['episodes'], self.stats['Loss'], self.stats['violations'], self.stats['proj_count'])):
+                    f.write(f"Episode {ep:4d}: Loss={loss:8.4f}, Violations={viol:4d}, Proj={proj:4d}\n")
+            if self.stats['V_max']:
+                f.write("\nVoltage summary\n")
+                f.write(f"Max: {max(self.stats['V_max']):.4f}, Min: {min(self.stats['V_min']):.4f}\n")
+            if self.stats['inference_times']:
+                f.write("\nInference Time Statistics\n")
+                f.write(f"Mean: {np.mean(self.stats['inference_times']):.6f}s, ")
+                f.write(f"Std: {np.std(self.stats['inference_times']):.6f}s, ")
+                f.write(f"Min: {min(self.stats['inference_times']):.6f}s, ")
+                f.write(f"Max: {max(self.stats['inference_times']):.6f}s\n")
+
+
 def main():
     torch.manual_seed(args.seed)
     writer = SummaryWriter(comment = args.exp_name)
+    logger = StatsLogger(args.exp_name)
+    
+    # Create results directory if it doesn't exist
+    os.makedirs("results", exist_ok=True)
     
     # Create Simulation Environment
     if args.network_name == 'ieee37':
@@ -78,11 +119,15 @@ def main():
     P_record = []
     Q_record = []
     
-    for i in range(n_episodes):
+    # Training loop with progress tracking
+    for i in tqdm(range(n_episodes), desc="Training Episodes", unit="episode"):
         loss = 0
         violation_count = 0
+        episode_inference_times = []
         
-        for k in range(num_steps):
+        # Inner loop with progress tracking (only show for first few episodes to avoid clutter)
+        step_iterator = tqdm(range(num_steps), desc=f"Episode {i+1} Steps", leave=False, disable=(i >= 5)) if i < 5 else range(num_steps)
+        for k in step_iterator:
             t = i*num_steps + k
             Sbus, P_av = env.getSbus(t)
             Sbus *= scaler
@@ -91,7 +136,14 @@ def main():
             
             state = torch.tensor(state).float().unsqueeze(0)
             
+            # Track projection count for monitoring
+            prev_proj_count = mbp_policy.proj_count
             P, Q = mbp_policy(state, Sbus, P_av = P_av)
+            
+            # Get inference time from policy
+            if hasattr(mbp_policy, 'get_last_inference_time'):
+                inference_time = mbp_policy.get_last_inference_time()
+                episode_inference_times.append(inference_time)
             #pdb.set_trace()
             
             V, success = env.step(P + 1j*Q)
@@ -101,6 +153,8 @@ def main():
                 violation_count += 1
             writer.add_scalar("V/max", max(V[1:]), t)
             writer.add_scalar("V/min", min(V[1:]), t)
+            logger.add_scalar("V/max", float(np.max(V[1:])), t)
+            logger.add_scalar("V/min", float(np.min(V[1:])), t)
             
             cost = np.clip(P_av - P[mbp_policy.gen_idx], 0, None)
             loss += cost
@@ -116,21 +170,54 @@ def main():
         writer.add_scalar("violations", violation_count, i)
         ## Number of Projection operation during inference time
         writer.add_scalar("proj_count", mbp_policy.proj_count, i)
+        
+        # Add stats to logger
+        logger.add_scalar("Loss", loss.mean().item(), i)
+        logger.add_scalar("violations", violation_count, i)
+        logger.add_scalar("proj_count", mbp_policy.proj_count, i)
+        
+        # Log inference time statistics for this episode
+        if episode_inference_times:
+            mean_inference_time = np.mean(episode_inference_times)
+            logger.add_scalar("inference_time", mean_inference_time, i)
+        
         mbp_policy.proj_count = 0
         
         if (i % 20 ==0) & (i>0):
+            # Save results
             np.save(f"results/V_{args.exp_name}.npy", np.array(V_record))
             np.save(f"results/P_{args.exp_name}.npy", np.array(P_record))
             np.save(f"results/Q_{args.exp_name}.npy", np.array(Q_record))
             
+            # Save trained model
+            torch.save({
+                'episode': i,
+                'model_state_dict': mbp_policy.nn.state_dict(),
+                'optimizer_state_dict': mbp_policy.optimizer.state_dict(),
+                'args': args,
+            }, f"results/model_{args.exp_name}_episode_{i}.pt")
+            logger.save()
+            print(f"Saved model checkpoint at episode {i}")
+            
+    # Final save of results and model
     np.save(f"results/V_{args.exp_name}.npy", np.array(V_record))
     np.save(f"results/P_{args.exp_name}.npy", np.array(P_record))
     np.save(f"results/Q_{args.exp_name}.npy", np.array(Q_record))
-            
+    
+    # Save final trained model
+    torch.save({
+        'episode': n_episodes,
+        'model_state_dict': mbp_policy.nn.state_dict(),
+        'optimizer_state_dict': mbp_policy.optimizer.state_dict(),
+        'args': args,
+    }, f"results/model_{args.exp_name}_final.pt")
+    logger.save()
+    print(f"Training completed! Final model saved as model_{args.exp_name}_final.pt")
+
 if __name__ == '__main__':
     main()
 
-'''
+
     # Example Usage of the environment
     t = 10
     Sbus = env.getSbus(t)
@@ -144,4 +231,4 @@ if __name__ == '__main__':
     # Estimation using the linearized model
     V_est = env.linear_estimate(Sbus)
     print(V_est)
-'''
+

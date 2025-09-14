@@ -1,3 +1,6 @@
+"""
+nn_policy.py: This file contains the neural network with projection.
+"""
 import numpy as np
 import cvxpy as cp
 from cvxpylayers.torch import CvxpyLayer

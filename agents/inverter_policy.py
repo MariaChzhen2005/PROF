@@ -1,6 +1,10 @@
+"""
+inverter_policy.py: This file contains the neural network with inverter projection.
+"""
 import numpy as np
 import cvxpy as cp
 from cvxpylayers.torch import CvxpyLayer
+import time
 
 import torch
 import torch.nn as nn
@@ -115,6 +119,10 @@ class NeuralController(nn.Module):
         self.Q0_torch = nn.Parameter(torch.tensor(self.Q0).float())
         self.S_rating_torch = nn.Parameter(torch.tensor(self.S_rating).float())
 
+        # Initialize timing tracking
+        self.inference_times = []
+        self.last_inference_time = 0.0
+        
         # Set up projection onto inverter setpoint constraints and linearized voltage constraints
         P = cp.Variable(len(self.gen_idx))
         Q = cp.Variable(len(self.gen_idx))
@@ -160,6 +168,9 @@ class NeuralController(nn.Module):
         Output:
             P, Q (with repsect to the reference point)
         '''
+        # Start timing for inference
+        start_time = time.time()
+        
         ## Get information for non-controllable loads
         P_all = Sbus.real /self.scaler
         Q_all = Sbus.imag /self.scaler
@@ -196,6 +207,12 @@ class NeuralController(nn.Module):
                 except: # The solver dies for some reason
                     P_all[self.gen_idx] = 0 
                     Q_all[self.gen_idx] = 0
+                
+                # Record inference time
+                if inference_flag:
+                    self.last_inference_time = time.time() - start_time
+                    self.inference_times.append(self.last_inference_time)
+                
                 return P_all, Q_all
         else:
             #pdb.set_trace()
@@ -205,6 +222,12 @@ class NeuralController(nn.Module):
                         torch.tensor(P_av).float().to(DEVICE))
             proj_loss = self.mse(P.detach(), P_tilde/self.scaler)  \
                         + self.mse(Q.detach(), Q_tilde/self.scaler)
+            
+            # Record inference time (training mode)
+            if inference_flag:
+                self.last_inference_time = time.time() - start_time
+                self.inference_times.append(self.last_inference_time)
+            
             return P, Q, proj_loss
     
     def update(self, batch_size = 64, n_batch = 16):
@@ -244,3 +267,13 @@ class NeuralController(nn.Module):
             return False
         else:
             return True
+    
+    def get_inference_times(self):
+        """Get the recorded inference times and clear the list"""
+        times = self.inference_times.copy()
+        self.inference_times.clear()
+        return times
+    
+    def get_last_inference_time(self):
+        """Get the last recorded inference time"""
+        return self.last_inference_time
