@@ -42,7 +42,7 @@ args = parser.parse_args()
 class StatsLogger:
     def __init__(self, exp_name):
         self.exp_name = exp_name
-        self.stats = {'V_max': [], 'V_min': [], 'Loss': [], 'violations': [], 'episodes': [], 'timesteps': [], 'proj_count': [], 'inference_times': []}
+        self.stats = {'V_max': [], 'V_min': [], 'Loss': [], 'violations': [], 'episodes': [], 'timesteps': [], 'proj_count': [], 'inference_times': [], 'curtailment': [], 'curtailment_episodes': []}
     def add_scalar(self, name, value, step):
         if name.startswith('V/'):
             metric = name.replace('V/', 'V_')
@@ -51,6 +51,9 @@ class StatsLogger:
         elif name in ['Loss', 'violations', 'proj_count']:
             self.stats[name].append(value)
             self.stats['episodes'].append(step)
+        elif name == 'curtailment':
+            self.stats['curtailment'].append(value)
+            self.stats['curtailment_episodes'].append(step)
         elif name == 'inference_time':
             self.stats['inference_times'].append(value)
     def save(self):
@@ -73,6 +76,13 @@ class StatsLogger:
                 f.write(f"Std: {np.std(self.stats['inference_times']):.6f}s, ")
                 f.write(f"Min: {min(self.stats['inference_times']):.6f}s, ")
                 f.write(f"Max: {max(self.stats['inference_times']):.6f}s\n")
+            if self.stats['curtailment']:
+                f.write(f"\nCurtailment Statistics\n")
+                f.write(f"Mean: {np.mean(self.stats['curtailment']):.6f}, ")
+                f.write(f"Std: {np.std(self.stats['curtailment']):.6f}, ")
+                f.write(f"Min: {min(self.stats['curtailment']):.6f}, ")
+                f.write(f"Max: {max(self.stats['curtailment']):.6f}\n")
+                f.write(f"Total curtailment: {sum(self.stats['curtailment']):.6f}\n")
 
 
 def main():
@@ -118,6 +128,7 @@ def main():
     V_est_record = []
     P_record = []
     Q_record = []
+    Curtailment_record = []
     
     # Training loop with progress tracking
     for i in tqdm(range(n_episodes), desc="Training Episodes", unit="episode"):
@@ -157,11 +168,13 @@ def main():
             logger.add_scalar("V/min", float(np.min(V[1:])), t)
             
             cost = np.clip(P_av - P[mbp_policy.gen_idx], 0, None)
+            curtailment = np.mean(cost)
             loss += cost
             
             V_record.append(V[1:])
             P_record.append(P)
             Q_record.append(Q)
+            Curtailment_record.append(cost)
             
             if (k % 900 == 0) & (t>0):
                 mbp_policy.update()
@@ -175,6 +188,7 @@ def main():
         logger.add_scalar("Loss", loss.mean().item(), i)
         logger.add_scalar("violations", violation_count, i)
         logger.add_scalar("proj_count", mbp_policy.proj_count, i)
+        logger.add_scalar("curtailment", loss.mean().item(), i)
         
         # Log inference time statistics for this episode
         if episode_inference_times:
@@ -188,6 +202,7 @@ def main():
             np.save(f"results/V_{args.exp_name}.npy", np.array(V_record))
             np.save(f"results/P_{args.exp_name}.npy", np.array(P_record))
             np.save(f"results/Q_{args.exp_name}.npy", np.array(Q_record))
+            np.save(f"results/Curtailment_{args.exp_name}.npy", np.array(Curtailment_record))
             
             # Save trained model
             torch.save({
@@ -203,6 +218,7 @@ def main():
     np.save(f"results/V_{args.exp_name}.npy", np.array(V_record))
     np.save(f"results/P_{args.exp_name}.npy", np.array(P_record))
     np.save(f"results/Q_{args.exp_name}.npy", np.array(Q_record))
+    np.save(f"results/Curtailment_{args.exp_name}.npy", np.array(Curtailment_record))
     
     # Save final trained model
     torch.save({
